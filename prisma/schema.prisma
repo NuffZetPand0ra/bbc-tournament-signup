@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  CLUB_ADMIN
+  PLAYER
+}
+
+enum TournamentStatus {
+  DRAFT
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+enum RegistrationMode {
+  PAIR
+  TEAM
+  SINGLE
+}
+
+enum RegistrantType {
+  AUTHENTICATED_USER
+  GUEST
+}
+
+enum RegistrationStatus {
+  CONFIRMED
+  WAITLIST
+  CANCELLED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(PLAYER)
+  passwordHash  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts           Account[]
+  sessions           Session[]
+  clubAdminAssignments ClubAdminAssignment[]
+  registrations      Registration[]
+  auditEvents        AuditEvent[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model Club {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent    Club?   @relation("ClubSubClubs", fields: [parentId], references: [id])
+  subClubs  Club[]  @relation("ClubSubClubs")
+
+  clubAdminAssignments ClubAdminAssignment[]
+  tournaments          Tournament[]
+
+  @@index([parentId])
+  @@map("clubs")
+}
+
+model ClubAdminAssignment {
+  id        String   @id @default(cuid())
+  userId    String
+  clubId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  club Club @relation(fields: [clubId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, clubId])
+  @@index([userId])
+  @@index([clubId])
+  @@map("club_admin_assignments")
+}
+
+model Tournament {
+  id               String           @id @default(cuid())
+  name             String
+  slug             String           @unique
+  clubId           String
+  date             DateTime
+  location         String
+  maxEntries       Int
+  price            Decimal?         @db.Decimal(10, 2)
+  notes            String?
+  signupDeadline   DateTime?
+  status           TournamentStatus @default(DRAFT)
+  registrationMode RegistrationMode @default(PAIR)
+  allowGuestSignup Boolean          @default(false)
+  waitlistEnabled  Boolean          @default(true)
+  teamMinPlayers   Int?
+  teamMaxPlayers   Int?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  club          Club           @relation(fields: [clubId], references: [id])
+  registrations Registration[]
+
+  @@index([clubId])
+  @@index([status])
+  @@index([date])
+  @@map("tournaments")
+}
+
+model Registration {
+  id               String             @id @default(cuid())
+  tournamentId     String
+  registrantType   RegistrantType
+  registrantEmail  String?
+  createdByUserId  String?
+  teamName         String?
+  status           RegistrationStatus @default(CONFIRMED)
+  editToken        String?            @unique
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  tournament   Tournament              @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  createdBy    User?                   @relation(fields: [createdByUserId], references: [id])
+  participants RegistrationParticipant[]
+
+  @@index([tournamentId])
+  @@index([createdByUserId])
+  @@index([status])
+  @@index([registrantEmail])
+  @@map("registrations")
+}
+
+model RegistrationParticipant {
+  id               String   @id @default(cuid())
+  registrationId   String
+  fullName         String
+  memberNumber     String
+  isContactPerson  Boolean  @default(false)
+  sortOrder        Int      @default(0)
+  createdAt        DateTime @default(now())
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([registrationId])
+  @@map("registration_participants")
+}
+
+model AuditEvent {
+  id                String   @id @default(cuid())
+  action            String
+  entityType        String
+  entityId          String
+  performedByUserId String?
+  metadata          Json?
+  createdAt         DateTime @default(now())
+
+  performedBy User? @relation(fields: [performedByUserId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([performedByUserId])
+  @@index([createdAt])
+  @@map("audit_events")
+}
