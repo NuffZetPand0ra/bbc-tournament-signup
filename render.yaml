@@ -26,6 +26,6 @@ services:
 databases:
   - name: bbc-tournament-db
     region: frankfurt
-    plan: starter
+    plan: basic
     databaseName: bbc_tournament
     user: bbc_tournament
